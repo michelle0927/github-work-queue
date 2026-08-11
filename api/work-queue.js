@@ -112,7 +112,7 @@ async function enrichItems(categorizedItems) {
           lastAuthorCommitDate = lastAuthorCommit.commit.committer.date;
         }
       }
-      const lastReview = reviews.find((r) => TEAM_MEMBERS.includes(r.user.login) && r.user.login !== author);
+      const lastReview = reviews.slice().reverse().find((r) => TEAM_MEMBERS.includes(r.user.login) && r.user.login !== author);
       const reviewer = prReviewer || lastReview?.user?.login;
       const approved = lastReview && lastReview.state === "APPROVED";
 
