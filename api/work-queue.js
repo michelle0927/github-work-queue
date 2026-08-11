@@ -244,22 +244,22 @@ function combineAndSortByUser(data) {
 }
 
 const RED_LABELS = ["blocked", "missing scopes", "paid-account-needed"];
-const GREEN_LABELS = ["high priority"];
-const DARK_BLUE_LABELS = ["prioritized"];
+const BLUE_LABELS = ["prioritized"];
+const HIGHLIGHT_LABELS = ["high priority"];
 
-function labelColor(label) {
+function labelStyle(label) {
   const lower = label.toLowerCase();
-  if (lower.includes("blocked") || RED_LABELS.includes(lower)) return "red";
-  if (GREEN_LABELS.includes(lower)) return "green";
-  if (DARK_BLUE_LABELS.includes(lower)) return "darkblue";
+  if (lower.includes("blocked") || RED_LABELS.includes(lower)) return "color:red";
+  if (BLUE_LABELS.includes(lower)) return "color:blue";
+  if (HIGHLIGHT_LABELS.includes(lower)) return "background-color:yellow";
   return null;
 }
 
 function formatLabels(labels) {
   return labels
     .map((label) => {
-      const color = labelColor(label);
-      return color ? `<span style="color:${color}">${label}</span>` : label;
+      const style = labelStyle(label);
+      return style ? `<span style="${style}">${label}</span>` : label;
     })
     .join(", ");
 }
