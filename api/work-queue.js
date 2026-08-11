@@ -126,6 +126,7 @@ async function enrichItems(categorizedItems) {
         approved,
         lastUpdated: item.updated_at,
         lastAuthorCommitDate,
+        lastReviewDate: lastReview?.submitted_at,
         assignee: item.content.assignee?.login,
       });
     })
@@ -143,6 +144,7 @@ async function enrichItems(categorizedItems) {
       approved: item.approved,
       lastUpdated: item.lastUpdated,
       lastAuthorCommitDate: item.lastAuthorCommitDate,
+      lastReviewDate: item.lastReviewDate,
       assignee: item.assignee,
     }));
   }
@@ -201,11 +203,24 @@ function applyReadyForPrReview(items) {
 
 function applyChangesRequired(items) {
   items.forEach((item) => {
-    const olderThan7Days = Date.parse(item.lastAuthorCommitDate) < Date.now() - 7 * 24 * 60 * 60 * 1000;
-    item.action = !TEAM_MEMBERS.includes(item.author) && !olderThan7Days
-      ? "Wait for user to complete changes"
-      : "Complete Changes";
-    item.actionUser = TEAM_MEMBERS.includes(item.author) ? item.author : item.reviewer;
+    if (TEAM_MEMBERS.includes(item.author)) {
+      item.action = "Complete Changes";
+      item.actionUser = item.author;
+      return;
+    }
+
+    const lastReviewDate = Date.parse(item.lastReviewDate);
+    const committedSinceReview = Date.parse(item.lastAuthorCommitDate) > lastReviewDate;
+    const olderThan7Days = lastReviewDate < Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+    if (committedSinceReview) {
+      item.action = "Review";
+    } else if (!olderThan7Days) {
+      item.action = "Wait for user to complete changes";
+    } else {
+      item.action = "Complete Changes";
+    }
+    item.actionUser = item.reviewer;
   });
   return items;
 }
@@ -226,6 +241,27 @@ function combineAndSortByUser(data) {
     });
     return result;
   }, {});
+}
+
+const RED_LABELS = ["blocked", "missing scopes", "paid-account-needed"];
+const GREEN_LABELS = ["high priority"];
+const DARK_BLUE_LABELS = ["prioritized"];
+
+function labelColor(label) {
+  const lower = label.toLowerCase();
+  if (lower.includes("blocked") || RED_LABELS.includes(lower)) return "red";
+  if (GREEN_LABELS.includes(lower)) return "green";
+  if (DARK_BLUE_LABELS.includes(lower)) return "darkblue";
+  return null;
+}
+
+function formatLabels(labels) {
+  return labels
+    .map((label) => {
+      const color = labelColor(label);
+      return color ? `<span style="color:${color}">${label}</span>` : label;
+    })
+    .join(", ");
 }
 
 function generateHtml(data) {
@@ -329,7 +365,7 @@ ${items.map((item) => `
   <td class="action">${item.action}</td>
   <td><a href="${item.url}">${item.title}</a></td>
   <td>${item.author}</td>
-  <td>${item.labels.join(", ")}</td>
+  <td>${formatLabels(item.labels)}</td>
 </tr>
 `).join("")}
 
