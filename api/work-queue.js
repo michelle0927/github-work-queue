@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/core";
 import { paginateRest } from "@octokit/plugin-paginate-rest";
+import { createAppAuth } from "@octokit/auth-app";
 
 const CustomOctokit = Octokit.plugin(paginateRest);
 
@@ -24,15 +25,15 @@ const TEAM_MEMBERS = [
   "Priyadharshan-Pdm",
 ];
 
-function githubHeaders() {
+function githubHeaders(token) {
   return {
-    Authorization: `Bearer ${process.env.GITHUB_OAUTH_TOKEN}`,
+    Authorization: `Bearer ${token}`,
     "X-GitHub-Api-Version": "2026-03-10",
   };
 }
 
-async function ghGet(url) {
-  const res = await fetch(url, { headers: githubHeaders() });
+async function ghGet(url, token) {
+  const res = await fetch(url, { headers: githubHeaders(token) });
   if (!res.ok) {
     throw new Error(`GitHub API ${url} failed: ${res.status} ${await res.text()}`);
   }
@@ -65,7 +66,7 @@ async function getItemsByColumn(client) {
   return buckets;
 }
 
-async function enrichItems(categorizedItems) {
+async function enrichItems(categorizedItems, token) {
   await Promise.all(
     Object.values(categorizedItems).flat().map(async (item) => {
       const content = item.content;
@@ -78,7 +79,8 @@ async function enrichItems(categorizedItems) {
       // get the attached PR for issues
       if (item.content_type === "Issue") {
         const timeline = await ghGet(
-          `https://api.github.com/repos/PipedreamHQ/pipedream/issues/${content.number}/timeline`
+          `https://api.github.com/repos/PipedreamHQ/pipedream/issues/${content.number}/timeline`,
+          token
         );
         const timelineItem = timeline.find(
           (i) => i.event === "cross-referenced" && i.source?.issue?.pull_request
@@ -89,7 +91,7 @@ async function enrichItems(categorizedItems) {
       }
 
       if (prNumber) {
-        pr = await ghGet(`https://api.github.com/repos/PipedreamHQ/pipedream/pulls/${prNumber}`);
+        pr = await ghGet(`https://api.github.com/repos/PipedreamHQ/pipedream/pulls/${prNumber}`, token);
         const reviewerObj = pr.requested_reviewers.find((r) => TEAM_MEMBERS.includes(r.login));
         if (reviewerObj) {
           prReviewer = reviewerObj.login;
@@ -101,8 +103,8 @@ async function enrichItems(categorizedItems) {
       let reviews = [];
       let commits = [];
       if (prNumber) {
-        reviews = await ghGet(`https://api.github.com/repos/PipedreamHQ/pipedream/pulls/${prNumber}/reviews`);
-        commits = await ghGet(`https://api.github.com/repos/PipedreamHQ/pipedream/pulls/${prNumber}/commits`);
+        reviews = await ghGet(`https://api.github.com/repos/PipedreamHQ/pipedream/pulls/${prNumber}/reviews`, token);
+        commits = await ghGet(`https://api.github.com/repos/PipedreamHQ/pipedream/pulls/${prNumber}/commits`, token);
       }
 
       let lastAuthorCommitDate;
@@ -384,10 +386,18 @@ ${items.map((item) => `
 
 export default async function handler(req, res) {
   try {
-    const client = new CustomOctokit({ auth: process.env.GITHUB_OAUTH_TOKEN });
+    const client = new CustomOctokit({
+      authStrategy: createAppAuth,
+      auth: {
+        appId: process.env.GITHUB_APP_ID,
+        privateKey: process.env.GITHUB_APP_PRIVATE_KEY.replace(/\\n/g, "\n"),
+        installationId: process.env.GITHUB_APP_INSTALLATION_ID,
+      },
+    });
+    const { token } = await client.auth({ type: "installation" });
 
     const categorizedItems = await getItemsByColumn(client);
-    const parsed = await enrichItems(categorizedItems);
+    const parsed = await enrichItems(categorizedItems, token);
 
     const byActionUser = combineAndSortByUser({
       readyForRelease: applyReadyForRelease(parsed.readyForRelease),
