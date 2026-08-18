@@ -26,7 +26,7 @@ const TEAM_MEMBERS = [
 
 function githubHeaders() {
   return {
-    Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+    Authorization: `Bearer ${process.env.GITHUB_OAUTH_TOKEN}`,
     "X-GitHub-Api-Version": "2026-03-10",
   };
 }
@@ -384,7 +384,7 @@ ${items.map((item) => `
 
 export default async function handler(req, res) {
   try {
-    const client = new CustomOctokit({ auth: process.env.GITHUB_TOKEN });
+    const client = new CustomOctokit({ auth: process.env.GITHUB_OAUTH_TOKEN });
 
     const categorizedItems = await getItemsByColumn(client);
     const parsed = await enrichItems(categorizedItems);
